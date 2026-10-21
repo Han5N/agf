@@ -34,13 +34,33 @@ the game still runs.
 | --- | --- | --- |
 | `agf_check` | Reads the manifest, runs every rule, returns diagnostics sorted error-first | Does not modify anything |
 | `agf_inspect` | Returns one entity's definition and its `usedBy` list | Does not merge equally close ID candidates |
-| `agf_add` | Appends exactly one entity, rewrites the manifest with sorted keys, then re-checks | Never overwrites an existing ID |
+| `agf_add` | Declares one or many entities in one call, rewrites the manifest with sorted keys, then checks once | Never overwrites an existing ID |
 | `agf_stats` | Returns counts and the largest module only | Carries no diagnostic text |
 | `agf_audit` | Reports asset and structural health with per-metric grades | Never blocks a round; emits no composite score |
+| `agf_extract` | Reads one HTML file and returns a split plan: assets, module boundaries, order | Never moves code; a misjudged closure boundary produces code that does not run |
 | `agf_log` | Runs the check, then appends one round to the project log | Refuses to append if the check cannot run |
 | `agf_prompt` | Returns Global Environment or this project's Local Project | Does not assemble a summary of the project |
 
 Exit codes: `0` no errors, `1` at least one error, `2` usage error.
+
+## Two stages
+
+A project is in one of two stages, and the rules differ on purpose.
+
+**prototype** — no `manifest.json`, one HTML file. `agf_check` runs in prototype
+mode: it warns about file size, inline assets and a missing viewport, and never
+blocks. Do not introduce a manifest here. Getting the game running is the whole
+job, and an architecture requirement at this stage is what produces a broken
+game with a clean manifest.
+
+**project** — a manifest exists. The full rule set applies.
+
+The transition is `agf_extract`. It returns a split plan: assets to externalise,
+top-level functions grouped into modules, and an order that goes from low
+coupling to high coupling. It never moves code itself.
+
+Split one step at a time, and run `agf_check` after each step. Splitting a
+closure-heavy file in one pass is how working code stops working.
 
 ## Audit is not check
 

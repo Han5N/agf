@@ -8,6 +8,8 @@ import { resolve, join } from "node:path";
 import { stat } from "node:fs/promises";
 import { loadManifest, MANIFEST_FILE } from "./manifest.js";
 import { runRules } from "./rules.js";
+import { extractProject, findHtml } from "./extract.js";
+import { CODES, diag } from "./diagnostics.js";
 import type { CheckResult, CheckSummary, Diagnostic, Manifest } from "./types.js";
 
 export function resolveRoot(input?: string): string {
@@ -16,11 +18,25 @@ export function resolveRoot(input?: string): string {
 
 export async function checkProject(inputRoot?: string): Promise<CheckResult> {
   const root = resolveRoot(inputRoot);
+
+  // No manifest: if there is a single-page game here, validate it loosely
+  // instead of failing. This is the prototype stage, and structural rules do
+  // not apply yet — the goal there is "it runs".
+  const manifestExists = await stat(join(root, MANIFEST_FILE)).then(
+    () => true,
+    () => false,
+  );
+  if (!manifestExists) {
+    const html = await findHtml(root);
+    if (html) return checkPrototype(root, html);
+  }
+
   const loaded = await loadManifest(root);
 
   if (!loaded.manifest) {
     return {
       ok: false,
+      mode: "project",
       manifestFile: join(root, MANIFEST_FILE),
       diagnostics: loaded.diagnostics,
       summary: emptySummary(),
@@ -34,9 +50,70 @@ export async function checkProject(inputRoot?: string): Promise<CheckResult> {
   const summary = withCounts(await summarize(root, loaded.manifest), sorted);
   return {
     ok: !sorted.some((d) => d.severity === "error"),
+    mode: "project",
     manifestFile: join(root, MANIFEST_FILE),
     diagnostics: sorted,
     summary,
+  };
+}
+
+/**
+ * Prototype mode.
+ *
+ * Deliberately warn-only: a single HTML file is the shape most models produce
+ * reliably, and blocking it would push the agent into an architecture before it
+ * has a running game. These signals say "time to split", not "you broke a rule".
+ */
+async function checkPrototype(root: string, html: string): Promise<CheckResult> {
+  const report = await extractProject(html, root);
+  const diagnostics: Diagnostic[] = [];
+
+  if (report.lines > 600) {
+    diagnostics.push(
+      diag(
+        CODES.PROTO_SIZE,
+        "warning",
+        html,
+        "",
+        `single file is ${report.lines} lines; split before adding the next feature`,
+        `Run agf extract ${html} and work through the plan one module at a time.`,
+      ),
+    );
+  }
+
+  const inlineAssets = report.assets.filter((asset) => asset.kind !== "external");
+  if (inlineAssets.length > 0) {
+    diagnostics.push(
+      diag(
+        CODES.PROTO_INLINE_ASSETS,
+        "warning",
+        html,
+        "",
+        `${inlineAssets.length} inline asset(s) inside the file`,
+        `Move each one under assets/ and reference it by relative path; run agf extract ${html} for the list.`,
+      ),
+    );
+  }
+
+  if (!report.hasViewport) {
+    diagnostics.push(
+      diag(
+        CODES.PROTO_NO_VIEWPORT,
+        "warning",
+        html,
+        "",
+        "no viewport meta tag, so phones render the desktop layout",
+        'Add <meta name="viewport" content="width=device-width, initial-scale=1"> inside <head>.',
+      ),
+    );
+  }
+
+  return {
+    ok: true,
+    mode: "prototype",
+    manifestFile: "",
+    diagnostics,
+    summary: emptySummary(),
   };
 }
 

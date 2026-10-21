@@ -24,6 +24,8 @@ curl -fsSL https://raw.githubusercontent.com/Han5N/agf/main/install.sh | bash -s
 
 ## 用法
 
+项目分两个阶段：没有 manifest 时按单文件原型对待，`check` 只提示不阻断；单文件能玩之后用 `agf extract` 生成拆分计划，一步一拆。
+
 ```bash
 agf init                       # 生成 AGF.md 与 .agf/ 日志目录
 agf check                      # 校验项目

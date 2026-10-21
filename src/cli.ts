@@ -5,12 +5,15 @@
  * Constraint: every capability must be available here. MCP is only a wrapper.
  * A feature reachable only through MCP is a feature locked to MCP-capable agents.
  */
+import { readFile, writeFile } from "node:fs/promises";
 import { checkProject } from "./check.js";
 import { formatDiagnostics, formatSummary } from "./diagnostics.js";
+import { extractProject, formatExtract } from "./extract.js";
 import { inspectEntity } from "./query.js";
-import { addEntity } from "./mutate.js";
+import { addEntities, type AddInput } from "./mutate.js";
 import { loadPrompt, type PromptSize } from "./prompt.js";
-import { appendLog, initLocal } from "./local.js";
+import { appendLog } from "./local.js";
+import { initProject } from "./init.js";
 import { auditProject } from "./audit.js";
 import { formatAudit } from "./audit-format.js";
 import { applySetup, diagnose, planSetup, CLIENTS, type ClientId, type SetupPlan } from "./setup.js";
@@ -34,6 +37,8 @@ async function main(argv: string[]): Promise<number> {
       return runStats(rootFlag ?? positional[0], json);
     case "audit":
       return runAudit(rootFlag ?? positional[0], json);
+    case "extract":
+      return runExtract(positional, flags, rootFlag, json);
     case "inspect":
       return runInspect(positional, rootFlag ?? positional[2], json);
     case "add":
@@ -67,10 +72,46 @@ async function runCheck(root: string | undefined, json: boolean): Promise<number
   const result = await checkProject(root);
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return result.ok ? 0 : 1;
+  }
+
+  const text = formatDiagnostics(result.diagnostics, useColor());
+  if (result.mode === "prototype") {
+    process.stdout.write(
+      `${text}\n\nprototype mode: single file, no manifest. Run agf extract index.html when you are ready to split.\n`,
+    );
   } else {
-    process.stdout.write(`${formatDiagnostics(result.diagnostics, useColor())}\n\n${formatSummary(result.summary)}\n`);
+    process.stdout.write(`${text}\n\n${formatSummary(result.summary)}\n`);
   }
   return result.ok ? 0 : 1;
+}
+
+async function runExtract(
+  positional: string[],
+  flags: Record<string, string | true>,
+  root: string | undefined,
+  json: boolean,
+): Promise<number> {
+  const source = positional[0] ?? (typeof flags.file === "string" ? flags.file : undefined);
+
+  try {
+    const report = await extractProject(source, root ?? positional[1]);
+    if (json) {
+      process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+      return 0;
+    }
+    const text = formatExtract(report);
+    if (typeof flags.out === "string") {
+      await writeFile(flags.out, `${text}\n`, "utf8");
+      process.stdout.write(`Wrote ${flags.out}\n`);
+    } else {
+      process.stdout.write(`${text}\n`);
+    }
+    return 0;
+  } catch (error) {
+    process.stderr.write(`${(error as Error).message}\n`);
+    return 1;
+  }
 }
 
 async function runStats(root: string | undefined, json: boolean): Promise<number> {
@@ -130,36 +171,62 @@ async function runAdd(
   root: string | undefined,
   json: boolean,
 ): Promise<number> {
-  const [kindRaw, id] = positional;
-  if (!kindRaw || !id) {
-    process.stderr.write("Usage: agf add <scene|widget|intent|asset> <id> --root <path> [options]\n");
-    return 2;
-  }
-  const kind = parseKind(kindRaw);
-  if (!kind) return 2;
+  let inputs: AddInput[];
 
-  const result = await addEntity({
-    kind,
-    id,
-    ...(root ? { root } : {}),
-    ...(typeof flags["asset-type"] === "string" ? { assetType: flags["asset-type"] as AssetType } : {}),
-    ...(typeof flags.src === "string" ? { src: flags.src } : {}),
-    ...(typeof flags["intent-type"] === "string" ? { intentType: flags["intent-type"] as IntentType } : {}),
-    ...(typeof flags.module === "string" ? { module: flags.module } : {}),
-    ...(typeof flags.intents === "string" ? { intents: splitList(flags.intents) } : {}),
-    ...(typeof flags.assets === "string" ? { assets: splitList(flags.assets) } : {}),
-    ...(typeof flags.widgets === "string" ? { widgets: splitList(flags.widgets) } : {}),
-  });
+  if (typeof flags.from === "string") {
+    const text = await readFile(flags.from, "utf8").catch(() => null);
+    if (text === null) {
+      process.stderr.write(`Cannot read ${flags.from}\n`);
+      return 2;
+    }
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (!Array.isArray(parsed)) throw new Error("expected a JSON array of entities");
+      inputs = parsed as AddInput[];
+    } catch (error) {
+      process.stderr.write(`Invalid --from payload: ${(error as Error).message}\n`);
+      return 2;
+    }
+  } else {
+    const [kindRaw, id] = positional;
+    if (!kindRaw || !id) {
+      process.stderr.write(
+        "Usage: agf add <scene|widget|intent|asset> <id> --root <path> [options]\n" +
+          "       agf add --from entities.json --root <path>\n",
+      );
+      return 2;
+    }
+    const kind = parseKind(kindRaw);
+    if (!kind) return 2;
+    inputs = [
+      {
+        kind,
+        id,
+        ...(typeof flags["asset-type"] === "string" ? { assetType: flags["asset-type"] as AssetType } : {}),
+        ...(typeof flags.src === "string" ? { src: flags.src } : {}),
+        ...(typeof flags["intent-type"] === "string" ? { intentType: flags["intent-type"] as IntentType } : {}),
+        ...(typeof flags.module === "string" ? { module: flags.module } : {}),
+        ...(typeof flags.intents === "string" ? { intents: splitList(flags.intents) } : {}),
+        ...(typeof flags.assets === "string" ? { assets: splitList(flags.assets) } : {}),
+        ...(typeof flags.widgets === "string" ? { widgets: splitList(flags.widgets) } : {}),
+      },
+    ];
+  }
+
+  const result = await addEntities(root, inputs);
 
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
     process.stdout.write(`${result.message}\n`);
-    if (result.check && result.check.diagnostics.length > 0) {
-      process.stdout.write(`\n${formatDiagnostics(result.check.diagnostics, useColor())}\n`);
+    for (const failure of result.failed) {
+      process.stdout.write(`  skipped ${failure.id}: ${failure.message}\n`);
+    }
+    if (result.diagnostics.length > 0) {
+      process.stdout.write(`\n${formatDiagnostics(result.diagnostics, useColor())}\n`);
     }
   }
-  return result.ok && (result.check?.ok ?? true) ? 0 : 1;
+  return result.ok ? 0 : 1;
 }
 
 async function runSetup(
@@ -265,11 +332,14 @@ async function runPrompt(
 }
 
 async function runInit(root: string | undefined, json: boolean): Promise<number> {
-  const result = await initLocal(root);
+  const result = await initProject(root);
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
     process.stdout.write(`${result.message}\n`);
+    if (result.created.length > 0) {
+      for (const path of result.created) process.stdout.write(`  created ${path}\n`);
+    }
   }
   return result.ok ? 0 : 1;
 }
@@ -363,6 +433,7 @@ function printHelp(): void {
       "  agf check [root] [--json]          Validate the whole project.",
       "  agf stats [root] [--json]          Counts and largest module only.",
       "  agf audit [root] [--json]          Asset health and structural health.",
+      "  agf extract <file> [--out plan.md]  Plan the split of a single-file game.",
       "  agf inspect <kind> <id> [root]     Definition, usedBy, nearest match.",
       "  agf add <kind> <id> --root <p>     Append one entity atomically.",
       "  agf init [root]                    Create AGF.md from the template.",

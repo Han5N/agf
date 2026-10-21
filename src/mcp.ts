@@ -16,10 +16,12 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { checkProject, resolveRoot } from "./check.js";
 import { inspectEntity } from "./query.js";
-import { addEntity } from "./mutate.js";
+import { addEntities, type AddInput } from "./mutate.js";
 import { loadPrompt } from "./prompt.js";
-import { appendLog, initLocal } from "./local.js";
+import { appendLog } from "./local.js";
+import { initProject } from "./init.js";
 import { auditProject } from "./audit.js";
+import { extractProject, formatExtract } from "./extract.js";
 import { MANIFEST_FILE } from "./manifest.js";
 
 const INSTRUCTIONS = [
@@ -29,6 +31,11 @@ const INSTRUCTIONS = [
   "- Global Environment: agf_prompt size=global, once per session. Tool guarantees and iron rules.",
   "- Local Project: agf_prompt size=local, once before the first edit and again after a context reset. It is the project's AGF.md joined with the round log from .agf/log.md, which agf_log writes and which stays out of version control.",
   "- Info Block: the return value of any tool call. Every diagnostic, every inspect result, every add response is one. Consume it where it arrives; do not ask for a summary of the same facts.",
+  "",
+  "Two stages, different rules:",
+  "- prototype: no manifest, one HTML file. agf_check warns about size, inline assets and viewport, and never blocks. Do not add a manifest at this stage.",
+  "- project: a manifest exists. The full rule set applies.",
+  "The transition is agf_extract: it returns a split plan and never moves code. Split one step at a time, and run agf_check after each step.",
   "",
   "Work in this order:",
   "1. agf_check to establish the baseline. Fix existing errors before adding anything.",
@@ -92,13 +99,30 @@ server.registerTool(
 server.registerTool(
   "agf_add",
   {
-    title: "Append one manifest entry",
+    title: "Declare manifest entities",
     description:
-      "Append exactly one declared entity, rewrite manifest.json with section keys sorted, then re-run the full check. Refuses to overwrite an existing ID; edit the manifest field directly to change one.",
+      "Declare one or many entities in a single call, rewrite manifest.json with section keys sorted, then check once. Prefer the entities array: fourteen separate calls cost fourteen round-trips. Existing IDs are skipped, never overwritten; the failed list names each skip.",
     inputSchema: {
-      kind: z.enum(["scene", "widget", "intent", "asset"]).describe("Entity kind."),
-      id: z.string().describe("New entity ID. Must satisfy the lowercase dot-separated grammar."),
       root: ROOT.optional(),
+      entities: z
+        .array(
+          z.object({
+            kind: z.enum(["scene", "widget", "intent", "asset"]),
+            id: z.string(),
+            assetType: z.enum(["image", "audio", "video", "font", "json"]).optional(),
+            src: z.string().optional(),
+            intentType: z.enum(["axis2", "button", "pointer", "text"]).optional(),
+            module: z.string().optional(),
+            intents: z.array(z.string()).optional(),
+            assets: z.array(z.string()).optional(),
+            widgets: z.array(z.string()).optional(),
+            merge: z.boolean().optional(),
+          }),
+        )
+        .optional()
+        .describe("Batch form. Each item uses the same fields as the single form."),
+      kind: z.enum(["scene", "widget", "intent", "asset"]).optional().describe("Single form. Prefer entities for more than one."),
+      id: z.string().optional().describe("Single form: new entity ID."),
       assetType: z.enum(["image", "audio", "video", "font", "json"]).optional().describe("Required when kind=asset."),
       src: z.string().optional().describe('Required when kind=asset. Project-relative path, for example "assets/bg_menu.svg".'),
       intentType: z.enum(["axis2", "button", "pointer", "text"]).optional().describe("Required when kind=intent."),
@@ -109,7 +133,38 @@ server.registerTool(
     },
   },
   async (input) => {
-    const result = await addEntity(input);
+    const list: AddInput[] =
+      input.entities && input.entities.length > 0
+        ? (input.entities as AddInput[])
+        : input.kind && input.id
+          ? [
+              {
+                kind: input.kind,
+                id: input.id,
+                ...(input.assetType ? { assetType: input.assetType } : {}),
+                ...(input.src ? { src: input.src } : {}),
+                ...(input.intentType ? { intentType: input.intentType } : {}),
+                ...(input.module ? { module: input.module } : {}),
+                ...(input.intents ? { intents: input.intents } : {}),
+                ...(input.assets ? { assets: input.assets } : {}),
+                ...(input.widgets ? { widgets: input.widgets } : {}),
+              },
+            ]
+          : [];
+
+    if (list.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ ok: false, message: "Pass entities[], or kind plus id." }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const result = await addEntities(input.root, list);
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       structuredContent: result as unknown as Record<string, unknown>,
@@ -155,6 +210,34 @@ server.registerTool(
 );
 
 server.registerTool(
+  "agf_extract",
+  {
+    title: "Plan the split of a single-file game",
+    description:
+      "Analyse one HTML file and return a split plan: inline assets to externalise, top-level functions classified into input/loop/render/rules/ui/audio/storage, suggested module paths, and an order that goes from low to high coupling. Does not modify any file, and does not split automatically — a misjudged closure boundary produces code that does not run.",
+    inputSchema: {
+      file: z.string().optional().describe("HTML file, relative to root. Defaults to index.html."),
+      root: ROOT.optional(),
+    },
+  },
+  async ({ file, root }) => {
+    try {
+      const report = await extractProject(file, root);
+      return {
+        content: [{ type: "text", text: formatExtract(report) }],
+        structuredContent: report as unknown as Record<string, unknown>,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ ok: false, message }, null, 2) }],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.registerTool(
   "agf_prompt",
   {
     title: "Load Global Environment or Local Project",
@@ -185,13 +268,13 @@ server.registerTool(
 server.registerTool(
   "agf_init",
   {
-    title: "Create the project ledger file",
+    title: "Bootstrap the project",
     description:
-      "Write AGF.md at the project root from the shipped template, filling name and entry from the manifest. Refuses to overwrite an existing AGF.md. Requires a readable manifest.",
+      "Works in an empty directory. Creates manifest.json, a minimal scene module, AGF.md and the git-ignored .agf/ log, producing a project that already passes check. Existing files are never overwritten.",
     inputSchema: { root: ROOT.optional() },
   },
   async ({ root }) => {
-    const result = await initLocal(root);
+    const result = await initProject(root);
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       structuredContent: result as unknown as Record<string, unknown>,

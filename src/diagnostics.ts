@@ -38,6 +38,14 @@ export const CODES = {
   ASSET_PATH_ESCAPE: "AGF014",
   /** a widget declares no intent */
   WIDGET_NO_INTENT: "AGF015",
+  /** prototype mode: the single file is large enough that splitting is due */
+  PROTO_SIZE: "PRT001",
+  /** prototype mode: assets are inlined into the file */
+  PROTO_INLINE_ASSETS: "PRT002",
+  /** prototype mode: no viewport meta, so phones render the desktop layout */
+  PROTO_NO_VIEWPORT: "PRT003",
+  /** prototype mode: no manifest and no HTML found */
+  PROTO_NO_SOURCE: "PRT004",
 } as const;
 
 export type DiagnosticCode = (typeof CODES)[keyof typeof CODES];

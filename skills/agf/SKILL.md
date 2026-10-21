@@ -48,21 +48,31 @@ continuing work you did not start.
 
 ## Route the task first
 
+Choose the first tool from the task, not from habit.
+
+- New project, no manifest: write one HTML file first. Do not create a manifest,
+  do not plan modules. `agf_check` reads it in prototype mode and only warns.
+- Single file runs, and the next step is more features: `agf_extract`, then split
+  one step at a time.
 - Unsure what is broken, or starting any task: `agf_check`.
 - About to change a declared entity: `agf_inspect`, then read `usedBy`.
-- Adding an asset, scene, widget or intent: `agf_add`.
+- Adding an asset, scene, widget or intent: `agf_add`. Pass every entity in one
+  `entities` array; one call, one check.
 - Asked "is this getting worse?": `agf_stats` and compare counts.
 - Need the rules: `agf_prompt size=global` or `size=local`.
 
 ## Work sequence
 
 1. If `.agf/log.md` exists, read the newest entry first. It tells you where the
-   last round stopped. If it does not exist, `agf_init`, then read the Contract.
-2. `agf_check` for the baseline. Fix existing errors before adding anything; an
-   error left in place pollutes every later diagnostic.
+   last round stopped. If it does not exist and a manifest exists, `agf_init`,
+   then read the Contract.
+2. `agf_check` for the baseline. In prototype mode it only warns; in project mode
+   fix errors before adding anything.
 3. `agf_inspect` on each entity you intend to change. Verify every entry in
    `usedBy`, or change those call sites in the same edit.
-4. `agf_add` to declare new entities. Do not hand-write `manifest.json`.
+4. `agf_add` to declare new entities. Do not hand-write `manifest.json`. Send one
+   `entities` array rather than one call per entity — the round-trips are the cost,
+   not the write.
 5. Write the module file the manifest now points at. Respect the boundaries in
    the Contract: scenes assemble, widgets consume intents, input adapters stay in
    `src/core/`.
@@ -72,6 +82,22 @@ continuing work you did not start.
    reason to keep working now.
 8. `agf_log` to close the round. It runs the check itself and records the
    measured result; you do not report the result to it.
+
+## From one file to modules
+
+A single HTML file is the shape most models produce reliably. Treat it as a valid
+stage, not a mistake.
+
+1. Get it running. `agf_check` in prototype mode warns about size, inline assets
+   and a missing viewport; none of that blocks.
+2. When the file passes roughly 600 lines, or the next feature would touch more
+   than one concern, run `agf_extract`.
+3. Work the plan in order: assets first, then pure rules, then rendering, then
+   input, then UI, then audio and storage.
+4. After each step, `agf_check`. If a step breaks the game, revert that step and
+   keep the previous one — do not split the next module on a broken baseline.
+5. Only after the modules exist, write `manifest.json` and a scene that assembles
+   them.
 
 ## Closing a round
 

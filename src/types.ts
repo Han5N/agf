@@ -104,6 +104,8 @@ export interface CheckSummary {
 
 export interface CheckResult {
   ok: boolean;
+  /** project: manifest-driven. prototype: a single HTML file, checked loosely. */
+  mode: "project" | "prototype";
   manifestFile: string;
   diagnostics: Diagnostic[];
   summary: CheckSummary;
