@@ -1,15 +1,7 @@
 #!/usr/bin/env bash
 #
-# agf installer.
+# curl -fsSL https://raw.githubusercontent.com/Han5N/agf/main/install.sh | bash -s -- [--client opencode|pi|claude-code]
 #
-# No npm account, no registry publish, no global package. It clones the repo,
-# builds it locally, and drops a one-line wrapper on PATH. Re-run it to update.
-#
-#   curl -fsSL https://raw.githubusercontent.com/Han5N/agf/main/install.sh | bash -s -- --client opencode
-#
-# Read this file before piping it into a shell if you prefer; it does nothing
-# beyond git clone, npm install, npm run build, and two writes under $HOME.
-
 set -euo pipefail
 
 REPO="${AGF_REPO:-Han5N/agf}"
@@ -31,7 +23,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     -h|--help)
-      sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+      echo "Usage: install.sh [--client opencode|pi|claude-code]"
       exit 0
       ;;
     *)
