@@ -49,9 +49,10 @@ A project is in one of two stages, and the rules differ on purpose.
 
 **prototype** — no `manifest.json`, one HTML file. `agf_check` runs in prototype
 mode: it warns about file size, inline assets and a missing viewport, and never
-blocks. Do not introduce a manifest here. Getting the game running is the whole
-job, and an architecture requirement at this stage is what produces a broken
-game with a clean manifest.
+blocks. On an empty directory it tells you to write the HTML, not to create a
+manifest. Do not run `agf_init` at this stage. Getting the game running is the
+whole job, and an architecture requirement here is what produces a broken game
+with a clean manifest.
 
 **project** — a manifest exists. The full rule set applies.
 

@@ -51,7 +51,8 @@ continuing work you did not start.
 Choose the first tool from the task, not from habit.
 
 - New project, no manifest: write one HTML file first. Do not create a manifest,
-  do not plan modules. `agf_check` reads it in prototype mode and only warns.
+  do not run `agf_init`, do not plan modules. `agf_check` reads it in prototype
+  mode and only warns.
 - Single file runs, and the next step is more features: `agf_extract`, then split
   one step at a time.
 - Unsure what is broken, or starting any task: `agf_check`.

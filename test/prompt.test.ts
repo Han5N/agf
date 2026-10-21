@@ -209,12 +209,12 @@ test("log carries a ruling when one is supplied", async () => {
   }
 });
 
-test("log refuses when the manifest cannot be read at all", async () => {
+test("log works in an empty prototype project", async () => {
   const root = await mkdtemp(join(tmpdir(), "agf-local-"));
   try {
-    const result = await appendLog({ root, task: "nothing to record" });
-    assert.equal(result.ok, false);
-    assert.match(result.message, /AGF001/);
+    const result = await appendLog({ root, task: "single-file prototype runs" });
+    assert.equal(result.ok, true);
+    assert.match(await readFile(join(root, LOG_FILE), "utf8"), /single-file prototype runs/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

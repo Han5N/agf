@@ -29,6 +29,25 @@ export async function checkProject(inputRoot?: string): Promise<CheckResult> {
   if (!manifestExists) {
     const html = await findHtml(root);
     if (html) return checkPrototype(root, html);
+    // Empty project. Point at the prototype stage, not at a manifest: the
+    // previous wording told the agent to create manifest.json first, and agents
+    // followed it straight into the structured stage before anything ran.
+    return {
+      ok: true,
+      mode: "prototype",
+      manifestFile: "",
+      diagnostics: [
+        diag(
+          CODES.PROTO_NO_SOURCE,
+          "warning",
+          ".",
+          "",
+          "empty project: no HTML and no manifest yet",
+          "Write one index.html that runs, then run agf check again. Do not create a manifest at this stage.",
+        ),
+      ],
+      summary: emptySummary(),
+    };
   }
 
   const loaded = await loadManifest(root);
