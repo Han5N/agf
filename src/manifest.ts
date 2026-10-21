@@ -77,7 +77,7 @@ function translate(err: ErrorObject): { message: string; fix: string } {
     default:
       return {
         message: `${at} ${err.message ?? "does not satisfy the manifest schema"}`,
-        fix: `Correct ${at} against the manifest contract in prompts/local.md.`,
+        fix: `Run "agf prompt local" for the manifest contract, then correct ${at}.`,
       };
   }
 }
@@ -97,7 +97,7 @@ export async function loadManifest(root: string): Promise<LoadResult> {
           MANIFEST_FILE,
           "",
           `cannot read manifest: ${(error as NodeJS.ErrnoException).code ?? "unknown error"}`,
-          `Create ${MANIFEST_FILE} at the project root. The minimum valid shape is in prompts/local.md.`,
+          `Create ${MANIFEST_FILE} at the project root. Run "agf prompt local" for the full contract, or copy examples/minimal/manifest.json.`,
         ),
       ],
     };

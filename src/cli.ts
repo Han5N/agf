@@ -75,6 +75,18 @@ async function runCheck(root: string | undefined, json: boolean): Promise<number
 
 async function runStats(root: string | undefined, json: boolean): Promise<number> {
   const result = await checkProject(root);
+
+  // Without this, a wrong path reads as an empty project instead of an error.
+  const fatal = result.diagnostics.filter((d) => d.code === "AGF001" || d.code === "AGF002");
+  if (fatal.length > 0) {
+    if (json) {
+      process.stdout.write(`${JSON.stringify({ ok: false, diagnostics: fatal }, null, 2)}\n`);
+    } else {
+      process.stdout.write(`${formatDiagnostics(fatal, useColor())}\n`);
+    }
+    return 1;
+  }
+
   if (json) {
     process.stdout.write(`${JSON.stringify({ ok: result.ok, summary: result.summary }, null, 2)}\n`);
   } else {
