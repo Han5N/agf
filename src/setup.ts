@@ -297,7 +297,9 @@ export async function planSetup(client: ClientId): Promise<SetupPlan> {
       ? "replace the installed skill with this version"
       : "install skills/agf into ~/.agents/skills so OpenCode and Pi both discover it",
     preview: "SKILL.md + references",
-    ...(skillExists ? { backup: backupPath(SHARED_SKILL_DIR) } : {}),
+    // No backup here on purpose: ~/.agents/skills is scanned recursively, so a
+    // backup directory would be discovered as a duplicate skill. The source of
+    // truth is the installation directory, so the copy is always rebuildable.
   });
 
   if (!base.warnings.some((w) => w.includes("dist/mcp.js")) && !(await exists(MCP_ENTRY))) {
@@ -318,11 +320,7 @@ export async function applySetup(plan: SetupPlan): Promise<ApplyResult> {
     }
 
     if (change.backup) {
-      if (change.path === SHARED_SKILL_DIR) {
-        await cp(SHARED_SKILL_DIR, change.backup, { recursive: true }).catch(() => undefined);
-      } else {
-        await copyFile(change.path, change.backup).catch(() => undefined);
-      }
+      await copyFile(change.path, change.backup).catch(() => undefined);
     }
 
     if (change.path === SHARED_SKILL_DIR) {
