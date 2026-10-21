@@ -1,0 +1,45 @@
+{
+  "name": "agf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Executable contract for AI-generated game projects: Core checker, CLI, MCP adapter, and three-size prompt blocks",
+  "bin": {
+    "agf": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "check": "tsx src/cli.ts check examples/minimal",
+    "check:json": "tsx src/cli.ts check examples/minimal --json",
+    "stats": "tsx src/cli.ts stats examples/minimal",
+    "mcp": "tsx src/mcp.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "ajv": "^8.20.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Han5N/agf.git"
+  },
+  "homepage": "https://github.com/Han5N/agf",
+  "bugs": {
+    "url": "https://github.com/Han5N/agf/issues"
+  }
+}

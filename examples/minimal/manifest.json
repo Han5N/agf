@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "name": "minimal",
+  "entry": "scene/main",
+  "assets": {
+    "bg_menu": {
+      "type": "image",
+      "src": "assets/bg_menu.svg"
+    },
+    "icon_play": {
+      "type": "image",
+      "src": "assets/icon_play.svg"
+    }
+  },
+  "intents": {
+    "confirm": {
+      "type": "button",
+      "bindings": [{ "key": "Enter" }]
+    },
+    "cancel": {
+      "type": "button",
+      "bindings": [{ "key": "Escape" }]
+    },
+    "move": {
+      "type": "axis2",
+      "bindings": [{ "keys": ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"] }]
+    }
+  },
+  "widgets": {
+    "button.primary": {
+      "intents": ["confirm", "cancel"],
+      "module": "src/ui/button.ts"
+    },
+    "hud": {
+      "intents": ["move"],
+      "module": "src/ui/hud.ts"
+    }
+  },
+  "scenes": {
+    "main": {
+      "module": "src/scenes/main.ts",
+      "assets": ["bg_menu", "icon_play"],
+      "widgets": ["button.primary", "hud"]
+    }
+  }
+}
